@@ -1,8 +1,3 @@
-[tasks.clean]
-script = [
-  "rm -f *.s tmp"
-]
-
 [tasks.run-test]
 script = [
 'cargo test',
@@ -17,6 +12,7 @@ assert() {
   ./tmp
   actual="$?"
   set -e
+  rm tmp.s tmp
 
   if [ "$actual" = "$expected" ]; then
     echo "$input => $actual"
