@@ -1,16 +1,13 @@
-#[cfg_attr(test, derive(Debug, PartialEq))]
-#[derive(Clone, Copy)]
-pub enum Location {
-    At(usize),
-    Span(usize, usize),
-}
+use crate::location::Location;
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
+#[derive(Clone)]
 enum LexErrorKind {
     UnexpectedCharacter(char),
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
+#[derive(Clone)]
 pub struct LexError<'a> {
     kind: LexErrorKind,
     location: Location,
@@ -144,5 +141,13 @@ impl<'a> Lexer<'a> {
                 location: Location::At(offset),
             }),
         }
+    }
+}
+
+impl<'a> std::iter::Iterator for Lexer<'a> {
+    type Item = Result<'a, (Token<'a>, Location)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.lex().transpose()
     }
 }
