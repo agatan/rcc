@@ -119,7 +119,13 @@ impl<'a> Lexer<'a> {
 
         let offset = self.offset();
 
-        if self.eat_char('+') || self.eat_char('-') || self.eat_char('*') || self.eat_char('/') {
+        if self.eat_char('+')
+            || self.eat_char('-')
+            || self.eat_char('*')
+            || self.eat_char('/')
+            || self.eat_char('(')
+            || self.eat_char(')')
+        {
             return Ok(Some((
                 Token::Reserved(&self.source[offset..offset + 1]),
                 Location::Span(offset, offset + 1),

@@ -122,6 +122,21 @@ impl<'source> Parser<'source> {
         )
     }
 
+    fn unexpected_token<T>(
+        &self,
+        expected: &'static str,
+        got: Token<'source>,
+        location: Location,
+    ) -> Result<T, Error<'source>> {
+        self.error(
+            ErrorKind::UnexpectedToken {
+                got,
+                expected: Some(expected),
+            },
+            location,
+        )
+    }
+
     fn peek(&self) -> Result<Option<(&Token, Location)>, Error<'source>> {
         match self.tokens.peek() {
             None => Ok(None),
@@ -154,22 +169,19 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn expect_number(&mut self) -> Result<i32, Error<'source>> {
-        let (token, loc) = self.next_token("number")?;
-        match token {
-            Token::Num(v) => Ok(v),
-            _ => self.error(
-                ErrorKind::UnexpectedToken {
-                    got: token,
-                    expected: Some("number"),
-                },
-                loc,
-            ),
-        }
-    }
-
     fn parse_primary(&mut self) -> Result<Node, Error<'source>> {
-        self.expect_number().map(|v| Node::Num(v))
+        let (token, loc) = self.next_token("primary expression")?;
+        match token {
+            Token::Reserved("(") => {
+                let expr = self.parse_expr()?;
+                match self.next_token("')'")? {
+                    (Token::Reserved(")"), _) => Ok(expr),
+                    (unexpected, loc) => self.unexpected_token("')'", unexpected, loc),
+                }
+            }
+            Token::Num(v) => Ok(Node::Num(v)),
+            _ => self.unexpected_token("primary expression", token, loc),
+        }
     }
 
     fn parse_mul(&mut self) -> Result<Node, Error<'source>> {
