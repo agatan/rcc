@@ -7,9 +7,8 @@ assert() {
   input="$2"
 
   ./target/debug/rcc "$input" > tmp.s
-  cc -o tmp tmp.s
   set +e
-  ./tmp
+  docker run --rm -v $PWD:/workdir -w /workdir gcc:9.3.0 bash -c "cc -o tmp tmp.s && ./tmp"
   actual="$?"
   set -e
   rm tmp.s tmp

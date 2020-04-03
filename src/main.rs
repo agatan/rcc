@@ -45,8 +45,8 @@ fn main() {
         }
     };
     println!(".intel_syntax noprefix");
-    println!(".global _main");
-    println!("_main:");
+    println!(".global main");
+    println!("main:");
 
     gen(node);
 
