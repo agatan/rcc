@@ -120,14 +120,11 @@ impl<'source> Parser<'source> {
         )
     }
 
-    fn peek(
-        &mut self,
-        expected: Option<&'static str>,
-    ) -> Result<(&Token, Location), Error<'source>> {
+    fn peek(&self) -> Result<Option<(&Token, Location)>, Error<'source>> {
         match self.tokens.peek() {
-            None => self.unexpected_eof(expected),
+            None => Ok(None),
             Some(Err(ref err)) => Err(err.clone().into()),
-            Some(Ok((token, loc))) => Ok((token, *loc)),
+            Some(Ok((token, loc))) => Ok(Some((token, *loc))),
         }
     }
 
@@ -138,6 +135,20 @@ impl<'source> Parser<'source> {
         match self.tokens.next() {
             Some(x) => Ok(x?),
             None => self.unexpected_eof(Some(expected)),
+        }
+    }
+
+    fn consume_if(
+        &mut self,
+        predicate: impl Fn(&Token) -> bool,
+        expected: &'static str,
+    ) -> Result<Option<(Token, Location)>, Error<'source>> {
+        match self.peek()? {
+            Some((token, _)) if predicate(token) => {
+                let (token, loc) = self.next_token(expected)?;
+                Ok(Some((token, loc)))
+            }
+            _ => Ok(None),
         }
     }
 
@@ -159,12 +170,33 @@ impl<'source> Parser<'source> {
         self.expect_number().map(|v| Node::Num(v))
     }
 
-    fn parse_mul(&mut self) -> Result<Node, Error<'source>> {
-        let lhs = self.parse_primary()?;
-        Ok(lhs)
-    }
-
     pub fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
-        self.parse_mul()
+        let mut expr = self.parse_primary()?;
+        loop {
+            if self
+                .consume_if(|token| token == &Token::Reserved("+"), "operator '+'")?
+                .is_some()
+            {
+                let rhs = self.parse_primary()?;
+                expr = Node::BinExpr {
+                    op: BinOp::Add,
+                    lhs: Box::new(expr),
+                    rhs: Box::new(rhs),
+                };
+            } else if self
+                .consume_if(|token| token == &Token::Reserved("-"), "operator '-'")?
+                .is_some()
+            {
+                let rhs = self.parse_primary()?;
+                expr = Node::BinExpr {
+                    op: BinOp::Sub,
+                    lhs: Box::new(expr),
+                    rhs: Box::new(rhs),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
     }
 }

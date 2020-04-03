@@ -33,6 +33,7 @@ impl<'a> std::fmt::Display for LexError<'a> {
     }
 }
 
+#[derive(PartialEq)]
 pub enum Token<'a> {
     Reserved(&'a str),
     Num(i32),
@@ -62,10 +63,6 @@ impl<'a> Lexer<'a> {
             char_indices: input.char_indices().peekable(),
             source: input,
         }
-    }
-
-    pub fn source(&self) -> &'a str {
-        self.source
     }
 
     fn offset(&mut self) -> usize {

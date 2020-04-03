@@ -9,7 +9,7 @@ use parser::{BinOp, Node, Parser};
 fn gen(node: Node) {
     match node {
         Node::Num(v) => {
-            println!("  mov rax, {}", v);
+            println!("  push {}", v);
             return;
         }
         Node::BinExpr { op, lhs, rhs } => {
@@ -21,6 +21,7 @@ fn gen(node: Node) {
                 BinOp::Add => println!("  add rax, rdi"),
                 BinOp::Sub => println!("  sub rax, rdi"),
             }
+            println!("  push rax");
         }
     }
 }
@@ -44,5 +45,6 @@ fn main() {
 
     gen(node);
 
+    println!("  pop rax");
     println!("  ret");
 }
