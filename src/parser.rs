@@ -184,14 +184,30 @@ impl<'source> Parser<'source> {
         }
     }
 
+    fn parse_unary(&mut self) -> Result<Node, Error<'source>> {
+        if self.consume_if(|token| token == &Token::Reserved("+"), "unary '+'")?.is_some() {
+            return self.parse_primary();
+        }
+        if self.consume_if(|token| token == &Token::Reserved("-"), "unary '-'")?.is_some() {
+            return Ok(
+                Node::BinExpr {
+                    op: BinOp::Sub,
+                    lhs: Box::new(Node::Num(0)),
+                    rhs: self.parse_primary().map(Box::new)?,
+                }
+            );
+        }
+        self.parse_primary()
+    }
+
     fn parse_mul(&mut self) -> Result<Node, Error<'source>> {
-        let mut mul = self.parse_primary()?;
+        let mut mul = self.parse_unary()?;
         loop {
             if self
                 .consume_if(|token| token == &Token::Reserved("*"), "operator '*'")?
                 .is_some()
             {
-                let rhs = self.parse_primary()?;
+                let rhs = self.parse_unary()?;
                 mul = Node::BinExpr {
                     op: BinOp::Mul,
                     lhs: Box::new(mul),
@@ -201,7 +217,7 @@ impl<'source> Parser<'source> {
                 .consume_if(|token| token == &Token::Reserved("/"), "operator '/'")?
                 .is_some()
             {
-                let rhs = self.parse_primary()?;
+                let rhs = self.parse_unary()?;
                 mul = Node::BinExpr {
                     op: BinOp::Div,
                     lhs: Box::new(mul),
