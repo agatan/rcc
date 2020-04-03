@@ -7,6 +7,10 @@ pub enum BinOp {
     Sub,
     Mul,
     Div,
+    Eq,
+    Ne,
+    Lt,
+    Le,
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
@@ -231,7 +235,7 @@ impl<'source> Parser<'source> {
         Ok(mul)
     }
 
-    pub fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
+    fn parse_add(&mut self) -> Result<Node, Error<'source>> {
         let mut expr = self.parse_mul()?;
         loop {
             if self.consume_reserved("+", "operator '+'")?.is_some() {
@@ -252,6 +256,78 @@ impl<'source> Parser<'source> {
                 break;
             }
         }
+        Ok(expr)
+    }
+
+    fn parse_relational(&mut self) -> Result<Node, Error<'source>> {
+        let mut add = self.parse_add()?;
+        loop {
+            let rhs;
+            let op;
+            if self.consume_reserved(">", "operator '>'")?.is_some() {
+                rhs = add;
+                add = self.parse_add()?;
+                op = BinOp::Lt;
+            } else if self.consume_reserved(">=", "operator '>='")?.is_some() {
+                rhs = add;
+                add = self.parse_add()?;
+                op = BinOp::Le;
+            } else if self.consume_reserved("<", "operator '<'")?.is_some() {
+                rhs = self.parse_add()?;
+                op = BinOp::Lt;
+            } else if self.consume_reserved("<=", "operator '<='")?.is_some() {
+                rhs = self.parse_add()?;
+                op = BinOp::Le;
+            } else {
+                break;
+            }
+            add = Node::BinExpr {
+                op: op,
+                lhs: Box::new(add),
+                rhs: Box::new(rhs),
+            }
+        }
+        Ok(add)
+    }
+
+    fn parse_equality(&mut self) -> Result<Node, Error<'source>> {
+        let mut rel = self.parse_relational()?;
+        loop {
+            let rhs;
+            let op;
+            if self.consume_reserved("==", "operator '=='")?.is_some() {
+                rhs = self.parse_relational()?;
+                op = BinOp::Eq;
+            } else if self.consume_reserved("!=", "operator '!='")?.is_some() {
+                rhs = self.parse_relational()?;
+                op = BinOp::Ne;
+            } else {
+                break;
+            }
+            rel = Node::BinExpr {
+                op: op,
+                lhs: Box::new(rel),
+                rhs: Box::new(rhs),
+            }
+        }
+        Ok(rel)
+    }
+
+    fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
+        self.parse_equality()
+    }
+
+    fn expect_eof(&mut self) -> Result<(), Error<'source>> {
+        match self.tokens.next() {
+            None => Ok(()),
+            Some(Ok((token, loc))) => self.unexpected_token("EOF", token, loc),
+            Some(Err(err)) => Err(err.into()),
+        }
+    }
+
+    pub fn parse(&mut self) -> Result<Node, Error<'source>> {
+        let expr = self.parse_expr()?;
+        self.expect_eof()?;
         Ok(expr)
     }
 }

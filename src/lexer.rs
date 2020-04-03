@@ -4,6 +4,7 @@ use crate::location::Location;
 #[derive(Clone)]
 enum LexErrorKind {
     UnexpectedCharacter(char),
+    UnexpectedEndOfFile,
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
@@ -29,6 +30,7 @@ impl<'a> std::fmt::Display for LexError<'a> {
         use LexErrorKind::*;
         match self.kind {
             UnexpectedCharacter(c) => write!(f, "unexpected character: {:?}", c),
+            UnexpectedEndOfFile => write!(f, "reached EOF"),
         }
     }
 }
@@ -82,6 +84,33 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn unexpected_eof<T>(&self) -> Result<'a, T> {
+        Err(LexError {
+            kind: LexErrorKind::UnexpectedEndOfFile,
+            source: self.source,
+            location: Location::At(self.source.len()),
+        })
+    }
+
+    fn unexpected_char<T>(&self, ch: char, location: Location) -> Result<'a, T> {
+        Err(LexError {
+            kind: LexErrorKind::UnexpectedCharacter(ch),
+            source: self.source,
+            location: location,
+        })
+    }
+
+    fn expect_char(&mut self, expect: char) -> Result<'a, char> {
+        match self.char_indices.peek().cloned() {
+            Some((_, c)) if c == expect => {
+                self.char_indices.next();
+                Ok(c)
+            }
+            Some((i, c)) => self.unexpected_char(c, Location::At(i)),
+            None => self.unexpected_eof(),
+        }
+    }
+
     fn eat_if(&mut self, predicate: impl Fn(char) -> bool) -> bool {
         match self.char_indices.peek() {
             Some((_, c)) if predicate(*c) => {
@@ -114,6 +143,13 @@ impl<'a> Lexer<'a> {
         Some((Token::Num(v), Location::Span(start, end)))
     }
 
+    fn new_reserved(&self, start: usize, end: usize) -> (Token<'a>, Location) {
+        (
+            Token::Reserved(&self.source[start..end]),
+            Location::Span(start, end),
+        )
+    }
+
     pub fn lex(&mut self) -> LexResult<'a> {
         while self.eat_whitespace() {}
 
@@ -130,6 +166,27 @@ impl<'a> Lexer<'a> {
                 Token::Reserved(&self.source[offset..offset + 1]),
                 Location::Span(offset, offset + 1),
             )));
+        }
+
+        if self.eat_char('=') {
+            self.expect_char('=')?;
+            return Ok(Some(self.new_reserved(offset, offset + 2)));
+        }
+        if self.eat_char('!') {
+            self.expect_char('=')?;
+            return Ok(Some(self.new_reserved(offset, offset + 2)));
+        }
+        if self.eat_char('<') {
+            if self.eat_char('=') {
+                return Ok(Some(self.new_reserved(offset, offset + 2)));
+            }
+            return Ok(Some(self.new_reserved(offset, offset + 1)));
+        }
+        if self.eat_char('>') {
+            if self.eat_char('=') {
+                return Ok(Some(self.new_reserved(offset, offset + 2)));
+            }
+            return Ok(Some(self.new_reserved(offset, offset + 1)));
         }
 
         if let Some(token) = self.lex_number() {

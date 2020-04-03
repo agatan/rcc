@@ -25,6 +25,26 @@ fn gen(node: Node) {
                     println!("  cqo");
                     println!("  idiv rdi");
                 }
+                BinOp::Eq => {
+                    println!("  cmp rax, rdi");
+                    println!("  sete al");
+                    println!("  movzb rax, al");
+                }
+                BinOp::Ne => {
+                    println!("  cmp rax, rdi");
+                    println!("  setne al");
+                    println!("  movzb rax, al");
+                }
+                BinOp::Lt => {
+                    println!("  cmp rax, rdi");
+                    println!("  setl al");
+                    println!("  movzb rax, al");
+                }
+                BinOp::Le => {
+                    println!("  cmp rax, rdi");
+                    println!("  setle al");
+                    println!("  movzb rax, al");
+                }
             }
             println!("  push rax");
         }
@@ -37,7 +57,7 @@ fn main() {
         eprintln!("{}: invalid number of arguments", args[0]);
         std::process::exit(1);
     }
-    let node = match Parser::new(&args[1]).parse_expr() {
+    let node = match Parser::new(&args[1]).parse() {
         Ok(node) => node,
         Err(err) => {
             eprintln!("{}", err);
