@@ -20,6 +20,11 @@ fn gen(node: Node) {
             match op {
                 BinOp::Add => println!("  add rax, rdi"),
                 BinOp::Sub => println!("  sub rax, rdi"),
+                BinOp::Mul => println!("  imul rax, rdi"),
+                BinOp::Div => {
+                    println!("  cqo");
+                    println!("  idiv rdi");
+                }
             }
             println!("  push rax");
         }

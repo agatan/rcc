@@ -5,6 +5,8 @@ use crate::location::{describe_location, Location};
 pub enum BinOp {
     Add,
     Sub,
+    Mul,
+    Div,
 }
 
 #[cfg_attr(test, derive(Debug, PartialEq))]
@@ -170,14 +172,44 @@ impl<'source> Parser<'source> {
         self.expect_number().map(|v| Node::Num(v))
     }
 
+    fn parse_mul(&mut self) -> Result<Node, Error<'source>> {
+        let mut mul = self.parse_primary()?;
+        loop {
+            if self
+                .consume_if(|token| token == &Token::Reserved("*"), "operator '*'")?
+                .is_some()
+            {
+                let rhs = self.parse_primary()?;
+                mul = Node::BinExpr {
+                    op: BinOp::Mul,
+                    lhs: Box::new(mul),
+                    rhs: Box::new(rhs),
+                };
+            } else if self
+                .consume_if(|token| token == &Token::Reserved("/"), "operator '/'")?
+                .is_some()
+            {
+                let rhs = self.parse_primary()?;
+                mul = Node::BinExpr {
+                    op: BinOp::Div,
+                    lhs: Box::new(mul),
+                    rhs: Box::new(rhs),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(mul)
+    }
+
     pub fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
-        let mut expr = self.parse_primary()?;
+        let mut expr = self.parse_mul()?;
         loop {
             if self
                 .consume_if(|token| token == &Token::Reserved("+"), "operator '+'")?
                 .is_some()
             {
-                let rhs = self.parse_primary()?;
+                let rhs = self.parse_mul()?;
                 expr = Node::BinExpr {
                     op: BinOp::Add,
                     lhs: Box::new(expr),
@@ -187,7 +219,7 @@ impl<'source> Parser<'source> {
                 .consume_if(|token| token == &Token::Reserved("-"), "operator '-'")?
                 .is_some()
             {
-                let rhs = self.parse_primary()?;
+                let rhs = self.parse_mul()?;
                 expr = Node::BinExpr {
                     op: BinOp::Sub,
                     lhs: Box::new(expr),
