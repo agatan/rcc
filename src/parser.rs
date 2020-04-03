@@ -155,17 +155,28 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn consume_if(
+    fn consume_reserved(
         &mut self,
-        predicate: impl Fn(&Token) -> bool,
+        keyword: &'static str,
         expected: &'static str,
     ) -> Result<Option<(Token, Location)>, Error<'source>> {
         match self.peek()? {
-            Some((token, _)) if predicate(token) => {
+            Some((Token::Reserved(s), _)) if s == &keyword => {
                 let (token, loc) = self.next_token(expected)?;
                 Ok(Some((token, loc)))
             }
             _ => Ok(None),
+        }
+    }
+
+    fn expect_reserved(
+        &mut self,
+        keyword: &'static str,
+        expected: &'static str,
+    ) -> Result<(Token, Location), Error<'source>> {
+        match self.next_token(expected)? {
+            (Token::Reserved(s), loc) if &s == &keyword => Ok((Token::Reserved(s), loc)),
+            (t, loc) => self.unexpected_token(expected, t, loc),
         }
     }
 
@@ -174,10 +185,8 @@ impl<'source> Parser<'source> {
         match token {
             Token::Reserved("(") => {
                 let expr = self.parse_expr()?;
-                match self.next_token("')'")? {
-                    (Token::Reserved(")"), _) => Ok(expr),
-                    (unexpected, loc) => self.unexpected_token("')'", unexpected, loc),
-                }
+                self.expect_reserved(")", "closing ')'")?;
+                Ok(expr)
             }
             Token::Num(v) => Ok(Node::Num(v)),
             _ => self.unexpected_token("primary expression", token, loc),
@@ -185,17 +194,15 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_unary(&mut self) -> Result<Node, Error<'source>> {
-        if self.consume_if(|token| token == &Token::Reserved("+"), "unary '+'")?.is_some() {
+        if self.consume_reserved("+", "unary '+'")?.is_some() {
             return self.parse_primary();
         }
-        if self.consume_if(|token| token == &Token::Reserved("-"), "unary '-'")?.is_some() {
-            return Ok(
-                Node::BinExpr {
-                    op: BinOp::Sub,
-                    lhs: Box::new(Node::Num(0)),
-                    rhs: self.parse_primary().map(Box::new)?,
-                }
-            );
+        if self.consume_reserved("-", "unary '-'")?.is_some() {
+            return Ok(Node::BinExpr {
+                op: BinOp::Sub,
+                lhs: Box::new(Node::Num(0)),
+                rhs: self.parse_primary().map(Box::new)?,
+            });
         }
         self.parse_primary()
     }
@@ -203,20 +210,14 @@ impl<'source> Parser<'source> {
     fn parse_mul(&mut self) -> Result<Node, Error<'source>> {
         let mut mul = self.parse_unary()?;
         loop {
-            if self
-                .consume_if(|token| token == &Token::Reserved("*"), "operator '*'")?
-                .is_some()
-            {
+            if self.consume_reserved("*", "operator '*'")?.is_some() {
                 let rhs = self.parse_unary()?;
                 mul = Node::BinExpr {
                     op: BinOp::Mul,
                     lhs: Box::new(mul),
                     rhs: Box::new(rhs),
                 };
-            } else if self
-                .consume_if(|token| token == &Token::Reserved("/"), "operator '/'")?
-                .is_some()
-            {
+            } else if self.consume_reserved("/", "operator '/'")?.is_some() {
                 let rhs = self.parse_unary()?;
                 mul = Node::BinExpr {
                     op: BinOp::Div,
@@ -233,20 +234,14 @@ impl<'source> Parser<'source> {
     pub fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
         let mut expr = self.parse_mul()?;
         loop {
-            if self
-                .consume_if(|token| token == &Token::Reserved("+"), "operator '+'")?
-                .is_some()
-            {
+            if self.consume_reserved("+", "operator '+'")?.is_some() {
                 let rhs = self.parse_mul()?;
                 expr = Node::BinExpr {
                     op: BinOp::Add,
                     lhs: Box::new(expr),
                     rhs: Box::new(rhs),
                 };
-            } else if self
-                .consume_if(|token| token == &Token::Reserved("-"), "operator '-'")?
-                .is_some()
-            {
+            } else if self.consume_reserved("-", "operator '-'")?.is_some() {
                 let rhs = self.parse_mul()?;
                 expr = Node::BinExpr {
                     op: BinOp::Sub,
