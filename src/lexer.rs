@@ -39,6 +39,7 @@ impl<'a> std::fmt::Display for LexError<'a> {
 pub enum Token<'a> {
     Reserved(&'a str),
     Num(i32),
+    Ident(char),
 }
 
 impl<'a> std::fmt::Display for Token<'a> {
@@ -46,6 +47,7 @@ impl<'a> std::fmt::Display for Token<'a> {
         match self {
             Token::Reserved(s) => write!(f, "keyword {:?}", s),
             Token::Num(i) => write!(f, "{}", i),
+            Token::Ident(ch) => write!(f, "'{}'", ch),
         }
     }
 }
@@ -111,13 +113,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn eat_if(&mut self, predicate: impl Fn(char) -> bool) -> bool {
-        match self.char_indices.peek() {
-            Some((_, c)) if predicate(*c) => {
+    fn eat_if(&mut self, predicate: impl Fn(char) -> bool) -> Option<char> {
+        match self.char_indices.peek().cloned() {
+            Some((_, c)) if predicate(c) => {
                 self.char_indices.next();
-                true
+                Some(c)
             }
-            _ => false,
+            _ => None,
         }
     }
 
@@ -126,11 +128,12 @@ impl<'a> Lexer<'a> {
             ' ' | '\t' | '\n' | '\r' => true,
             _ => false,
         })
+        .is_some()
     }
 
     fn lex_number(&mut self) -> Lexed<'a> {
         let start = self.offset();
-        while self.eat_if(|c| c.is_digit(10)) {}
+        while self.eat_if(|c| c.is_digit(10)).is_some() {}
         let end = self.offset();
 
         if start == end {
@@ -169,8 +172,10 @@ impl<'a> Lexer<'a> {
         }
 
         if self.eat_char('=') {
-            self.expect_char('=')?;
-            return Ok(Some(self.new_reserved(offset, offset + 2)));
+            if self.eat_char('=') {
+                return Ok(Some(self.new_reserved(offset, offset + 2)));
+            }
+            return Ok(Some(self.new_reserved(offset, offset + 1)));
         }
         if self.eat_char('!') {
             self.expect_char('=')?;
@@ -187,6 +192,10 @@ impl<'a> Lexer<'a> {
                 return Ok(Some(self.new_reserved(offset, offset + 2)));
             }
             return Ok(Some(self.new_reserved(offset, offset + 1)));
+        }
+
+        if let Some(c) = self.eat_if(|c| 'a' <= c && c <= 'z') {
+            return Ok(Some((Token::Ident(c), Location::Span(offset, offset + 1))));
         }
 
         if let Some(token) = self.lex_number() {

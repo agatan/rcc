@@ -48,6 +48,8 @@ fn gen(node: Node) {
             }
             println!("  push rax");
         }
+        Node::Assign { .. } => todo!(),
+        Node::Ident(_) => todo!(),
     }
 }
 
@@ -57,8 +59,8 @@ fn main() {
         eprintln!("{}: invalid number of arguments", args[0]);
         std::process::exit(1);
     }
-    let node = match Parser::new(&args[1]).parse() {
-        Ok(node) => node,
+    let node = match Parser::new(&args[1]).parse_program() {
+        Ok(mut node) => node.pop().unwrap(),
         Err(err) => {
             eprintln!("{}", err);
             std::process::exit(1);

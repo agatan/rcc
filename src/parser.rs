@@ -21,6 +21,11 @@ pub enum Node {
         rhs: Box<Node>,
     },
     Num(i32),
+    Ident(u32),
+    Assign {
+        lhs: Box<Node>,
+        rhs: Box<Node>,
+    },
 }
 
 enum ErrorKind<'a> {
@@ -193,6 +198,7 @@ impl<'source> Parser<'source> {
                 Ok(expr)
             }
             Token::Num(v) => Ok(Node::Num(v)),
+            Token::Ident(c) => Ok(Node::Ident((c as u32 - 'a' as u32 + 1) * 8)),
             _ => self.unexpected_token("primary expression", token, loc),
         }
     }
@@ -313,21 +319,40 @@ impl<'source> Parser<'source> {
         Ok(rel)
     }
 
-    fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
-        self.parse_equality()
-    }
-
-    fn expect_eof(&mut self) -> Result<(), Error<'source>> {
-        match self.tokens.next() {
-            None => Ok(()),
-            Some(Ok((token, loc))) => self.unexpected_token("EOF", token, loc),
-            Some(Err(err)) => Err(err.into()),
+    fn parse_assign(&mut self) -> Result<Node, Error<'source>> {
+        let equality = self.parse_equality()?;
+        if self
+            .consume_reserved("=", "assignment operator '='")?
+            .is_some()
+        {
+            let value = self.parse_assign()?;
+            return Ok(Node::Assign {
+                lhs: Box::new(equality),
+                rhs: Box::new(value),
+            });
         }
+        Ok(equality)
     }
 
-    pub fn parse(&mut self) -> Result<Node, Error<'source>> {
+    fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
+        self.parse_assign()
+    }
+
+    fn parse_statement(&mut self) -> Result<Node, Error<'source>> {
         let expr = self.parse_expr()?;
-        self.expect_eof()?;
+        self.expect_reserved(";", "';'")?;
         Ok(expr)
+    }
+
+    fn at_eof(&self) -> bool {
+        self.tokens.peek().is_none()
+    }
+
+    pub fn parse_program(&mut self) -> Result<Vec<Node>, Error<'source>> {
+        let mut stmts = Vec::new();
+        while !self.at_eof() {
+            stmts.push(self.parse_statement()?);
+        }
+        Ok(stmts)
     }
 }
