@@ -100,7 +100,7 @@ impl<'a> Lexer<'a> {
         Err(LexError {
             kind: LexErrorKind::UnexpectedCharacter(ch),
             source: self.source,
-            location: location,
+            location,
         })
     }
 

@@ -133,7 +133,7 @@ impl<'source> ParserContext<'source> {
             return lvar.clone();
         }
         let lvar = LVar {
-            name: name,
+            name,
             offset: (self.locals.len() + 1) * 8,
         };
         self.locals.push(lvar.clone());
@@ -149,7 +149,7 @@ pub struct Parser<'source> {
 impl<'source> Parser<'source> {
     pub fn new(source: &'source str) -> Self {
         Parser {
-            source: source,
+            source,
             tokens: Tokens::new(Lexer::new(source)),
         }
     }
@@ -218,7 +218,7 @@ impl<'source> Parser<'source> {
         expected: &'static str,
     ) -> Result<(Token, Location), Error<'source>> {
         match self.next_token(expected)? {
-            (Token::Operator(s), loc) if &s == &keyword => Ok((Token::Operator(s), loc)),
+            (Token::Operator(s), loc) if s == keyword => Ok((Token::Operator(s), loc)),
             (t, loc) => self.unexpected_token(expected, t, loc),
         }
     }
@@ -337,7 +337,7 @@ impl<'source> Parser<'source> {
                 break;
             }
             add = Node::BinExpr {
-                op: op,
+                op,
                 lhs: Box::new(add),
                 rhs: Box::new(rhs),
             }
@@ -363,7 +363,7 @@ impl<'source> Parser<'source> {
                 break;
             }
             rel = Node::BinExpr {
-                op: op,
+                op,
                 lhs: Box::new(rel),
                 rhs: Box::new(rhs),
             }

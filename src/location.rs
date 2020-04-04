@@ -22,7 +22,7 @@ pub fn describe_location(
         let current_line_end = source[start..]
             .find(|c| c == '\r' || c == '\n')
             .map(|i| i + start)
-            .unwrap_or(source.len());
+            .unwrap_or_else(|| source.len());
         let current_line = &source[current_line_start..current_line_end];
         let column = start - current_line_start + 1;
         writeln!(f, " caused at {}:{}:", line_number, column)?;
