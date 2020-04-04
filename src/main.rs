@@ -1,9 +1,9 @@
 use std::env;
 
+mod compile;
 mod lexer;
 mod location;
 mod parser;
-mod compile;
 
 use parser::Parser;
 
@@ -13,19 +13,20 @@ fn main() {
         eprintln!("{}: invalid number of arguments", args[0]);
         std::process::exit(1);
     }
-    let node = match Parser::new(&args[1]).parse_program() {
-        Ok(mut node) => node.pop().unwrap(),
+
+    let program = match Parser::new(&args[1]).parse_program() {
+        Ok(program) => program,
         Err(err) => {
             eprintln!("{}", err);
             std::process::exit(1);
         }
     };
-    println!(".intel_syntax noprefix");
-    println!(".global main");
-    println!("main:");
 
-    compile::gen(node);
-
-    println!("  pop rax");
-    println!("  ret");
+    match compile::gen_program(program) {
+        Err(err) => {
+            eprintln!("{}", err);
+            std::process::exit(1);
+        }
+        Ok(()) => {},
+    };
 }

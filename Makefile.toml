@@ -22,29 +22,32 @@ assert() {
 }
 
 cargo build
-assert 0 0
-assert 42 42
-assert 21 "5 + 20 - 4"
-assert 23 "3 + 4 * 5"
-assert 42 "90 / 2 - 3"
-assert 35 "(3 + 4) * 5"
-assert 15 "5 * (9 - 6)"
-assert 5 "+5"
-assert 1 "5 + -4"
+assert 0 "0;"
+assert 42 "42;"
+assert 21 "5 + 20 - 4;"
+assert 23 "3 + 4 * 5;"
+assert 42 "90 / 2 - 3;"
+assert 35 "(3 + 4) * 5;"
+assert 15 "5 * (9 - 6);"
+assert 5 "+5;"
+assert 1 "5 + -4;"
 
-assert 0 "1 == 1 + 2 * 3"
-assert 7 "(1 == 1) + 2 * 3"
-assert 1 "1 == 1"
+assert 0 "1 == 1 + 2 * 3;"
+assert 7 "(1 == 1) + 2 * 3;"
+assert 1 "1 == 1;"
 
-assert 0 "1 + 2 < 3"
-assert 1 "1 < 2"
-assert 0 "1 + 2 <= 2"
-assert 1 "2 <= 2"
+assert 0 "1 + 2 < 3;"
+assert 1 "1 < 2;"
+assert 0 "1 + 2 <= 2;"
+assert 1 "2 <= 2;"
 
-assert 0 "1 > 1"
-assert 1 "1 > 0"
-assert 0 "1 >= 2"
-assert 1 "2 >= 1"
+assert 0 "1 > 1;"
+assert 1 "1 > 0;"
+assert 0 "1 >= 2;"
+assert 1 "2 >= 1;"
+
+assert 0 "a = 1; b = 2; b - a * 2;"
+assert 0 "a = 1; b = 2; c = b - a; b = 1; b - c;"
 
 echo OK
 '''

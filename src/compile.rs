@@ -1,14 +1,45 @@
 use crate::parser::{BinOp, Node};
 
-pub fn gen(node: Node) {
+pub enum ErrorKind {
+    AssignmentToRValue,
+}
+
+pub struct Error {
+    kind: ErrorKind,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.kind {
+            ErrorKind::AssignmentToRValue => f.write_str("expression is not assignable"),
+        }
+    }
+}
+
+fn gen_lval(node: Node) -> Result<(), Error> {
+    let offset = match node {
+        Node::Ident(offset) => offset,
+        _ => {
+            return Err(Error {
+                kind: ErrorKind::AssignmentToRValue,
+            });
+        }
+    };
+    println!("  mov rax, rbp");
+    println!("  sub rax, {}", offset);
+    println!("  push rax");
+    Ok(())
+}
+
+fn gen(node: Node) -> Result<(), Error> {
     match node {
         Node::Num(v) => {
             println!("  push {}", v);
-            return;
+            return Ok(());
         }
         Node::BinExpr { op, lhs, rhs } => {
-            gen(*lhs);
-            gen(*rhs);
+            gen(*lhs)?;
+            gen(*rhs)?;
             println!("  pop rdi");
             println!("  pop rax");
             match op {
@@ -42,7 +73,41 @@ pub fn gen(node: Node) {
             }
             println!("  push rax");
         }
-        Node::Assign { .. } => todo!(),
-        Node::Ident(_) => todo!(),
+        Node::Assign { lhs, rhs } => {
+            gen_lval(*lhs)?;
+            gen(*rhs)?;
+            println!("  pop rdi");
+            println!("  pop rax");
+            println!("  mov [rax], rdi");
+            println!("  push rdi");
+        },
+        Node::Ident(_) => {
+            gen_lval(node)?;
+            println!("  pop rax");
+            println!("  mov rax, [rax]");
+            println!("  push rax");
+        },
     }
+    Ok(())
+}
+
+pub fn gen_program(stmts: Vec<Node>) -> Result<(), Error> {
+    println!(".intel_syntax noprefix");
+    println!(".global main");
+    println!("main:");
+
+    // Allocate memory for 26 variables.
+    println!("  push rbp");
+    println!("  mov rbp, rsp");
+    println!("  sub rsp, 208");
+
+    for node in stmts {
+        gen(node)?;
+        println!("  pop rax");
+    }
+
+    println!("  mov rsp, rbp");
+    println!("  pop rbp");
+    println!("  ret");
+    Ok(())
 }
