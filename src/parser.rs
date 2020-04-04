@@ -37,6 +37,7 @@ pub enum Node<'source> {
         lhs: Box<Node<'source>>,
         rhs: Box<Node<'source>>,
     },
+    Return(Box<Node<'source>>),
 }
 
 enum ErrorKind<'a> {
@@ -197,7 +198,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn consume_reserved(
+    fn consume_operator(
         &mut self,
         keyword: &'static str,
         expected: &'static str,
@@ -211,7 +212,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn expect_reserved(
+    fn expect_operator(
         &mut self,
         keyword: &'static str,
         expected: &'static str,
@@ -230,7 +231,7 @@ impl<'source> Parser<'source> {
         match token {
             Token::Operator("(") => {
                 let expr = self.parse_expr(ctx)?;
-                self.expect_reserved(")", "closing ')'")?;
+                self.expect_operator(")", "closing ')'")?;
                 Ok(expr)
             }
             Token::Num(v) => Ok(Node::Num(v)),
@@ -243,10 +244,10 @@ impl<'source> Parser<'source> {
         &mut self,
         ctx: &mut ParserContext<'source>,
     ) -> Result<Node<'source>, Error<'source>> {
-        if self.consume_reserved("+", "unary '+'")?.is_some() {
+        if self.consume_operator("+", "unary '+'")?.is_some() {
             return self.parse_primary(ctx);
         }
-        if self.consume_reserved("-", "unary '-'")?.is_some() {
+        if self.consume_operator("-", "unary '-'")?.is_some() {
             return Ok(Node::BinExpr {
                 op: BinOp::Sub,
                 lhs: Box::new(Node::Num(0)),
@@ -262,14 +263,14 @@ impl<'source> Parser<'source> {
     ) -> Result<Node<'source>, Error<'source>> {
         let mut mul = self.parse_unary(ctx)?;
         loop {
-            if self.consume_reserved("*", "operator '*'")?.is_some() {
+            if self.consume_operator("*", "operator '*'")?.is_some() {
                 let rhs = self.parse_unary(ctx)?;
                 mul = Node::BinExpr {
                     op: BinOp::Mul,
                     lhs: Box::new(mul),
                     rhs: Box::new(rhs),
                 };
-            } else if self.consume_reserved("/", "operator '/'")?.is_some() {
+            } else if self.consume_operator("/", "operator '/'")?.is_some() {
                 let rhs = self.parse_unary(ctx)?;
                 mul = Node::BinExpr {
                     op: BinOp::Div,
@@ -289,14 +290,14 @@ impl<'source> Parser<'source> {
     ) -> Result<Node<'source>, Error<'source>> {
         let mut expr = self.parse_mul(ctx)?;
         loop {
-            if self.consume_reserved("+", "operator '+'")?.is_some() {
+            if self.consume_operator("+", "operator '+'")?.is_some() {
                 let rhs = self.parse_mul(ctx)?;
                 expr = Node::BinExpr {
                     op: BinOp::Add,
                     lhs: Box::new(expr),
                     rhs: Box::new(rhs),
                 };
-            } else if self.consume_reserved("-", "operator '-'")?.is_some() {
+            } else if self.consume_operator("-", "operator '-'")?.is_some() {
                 let rhs = self.parse_mul(ctx)?;
                 expr = Node::BinExpr {
                     op: BinOp::Sub,
@@ -318,18 +319,18 @@ impl<'source> Parser<'source> {
         loop {
             let rhs;
             let op;
-            if self.consume_reserved(">", "operator '>'")?.is_some() {
+            if self.consume_operator(">", "operator '>'")?.is_some() {
                 rhs = add;
                 add = self.parse_add(ctx)?;
                 op = BinOp::Lt;
-            } else if self.consume_reserved(">=", "operator '>='")?.is_some() {
+            } else if self.consume_operator(">=", "operator '>='")?.is_some() {
                 rhs = add;
                 add = self.parse_add(ctx)?;
                 op = BinOp::Le;
-            } else if self.consume_reserved("<", "operator '<'")?.is_some() {
+            } else if self.consume_operator("<", "operator '<'")?.is_some() {
                 rhs = self.parse_add(ctx)?;
                 op = BinOp::Lt;
-            } else if self.consume_reserved("<=", "operator '<='")?.is_some() {
+            } else if self.consume_operator("<=", "operator '<='")?.is_some() {
                 rhs = self.parse_add(ctx)?;
                 op = BinOp::Le;
             } else {
@@ -352,10 +353,10 @@ impl<'source> Parser<'source> {
         loop {
             let rhs;
             let op;
-            if self.consume_reserved("==", "operator '=='")?.is_some() {
+            if self.consume_operator("==", "operator '=='")?.is_some() {
                 rhs = self.parse_relational(ctx)?;
                 op = BinOp::Eq;
-            } else if self.consume_reserved("!=", "operator '!='")?.is_some() {
+            } else if self.consume_operator("!=", "operator '!='")?.is_some() {
                 rhs = self.parse_relational(ctx)?;
                 op = BinOp::Ne;
             } else {
@@ -376,7 +377,7 @@ impl<'source> Parser<'source> {
     ) -> Result<Node<'source>, Error<'source>> {
         let equality = self.parse_equality(ctx)?;
         if self
-            .consume_reserved("=", "assignment operator '='")?
+            .consume_operator("=", "assignment operator '='")?
             .is_some()
         {
             let value = self.parse_assign(ctx)?;
@@ -399,9 +400,15 @@ impl<'source> Parser<'source> {
         &mut self,
         ctx: &mut ParserContext<'source>,
     ) -> Result<Node<'source>, Error<'source>> {
-        let expr = self.parse_expr(ctx)?;
-        self.expect_reserved(";", "';'")?;
-        Ok(expr)
+        let node = if let Some((Token::Return, _)) = self.peek()? {
+            self.next_token("keyword 'return'")?;
+            let value = self.parse_expr(ctx)?;
+            Node::Return(Box::new(value))
+        } else {
+            self.parse_expr(ctx)?
+        };
+        self.expect_operator(";", "';'")?;
+        Ok(node)
     }
 
     fn at_eof(&self) -> bool {

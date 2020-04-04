@@ -80,13 +80,20 @@ fn gen(node: Node) -> Result<(), Error> {
             println!("  pop rax");
             println!("  mov [rax], rdi");
             println!("  push rdi");
-        },
+        }
         Node::Ident(_) => {
             gen_lval(node)?;
             println!("  pop rax");
             println!("  mov rax, [rax]");
             println!("  push rax");
-        },
+        }
+        Node::Return(value) => {
+            gen(*value)?;
+            println!("  pop rax");
+            println!("  mov rsp, rbp");
+            println!("  pop rbp");
+            println!("  ret");
+        }
     }
     Ok(())
 }
