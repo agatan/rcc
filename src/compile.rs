@@ -17,8 +17,8 @@ impl std::fmt::Display for Error {
 }
 
 fn gen_lval(node: Node) -> Result<(), Error> {
-    let offset = match node {
-        Node::Ident(offset) => offset,
+    let lvar = match node {
+        Node::Ident(lvar) => lvar,
         _ => {
             return Err(Error {
                 kind: ErrorKind::AssignmentToRValue,
@@ -26,7 +26,7 @@ fn gen_lval(node: Node) -> Result<(), Error> {
         }
     };
     println!("  mov rax, rbp");
-    println!("  sub rax, {}", offset);
+    println!("  sub rax, {}", lvar.offset());
     println!("  push rax");
     Ok(())
 }

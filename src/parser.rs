@@ -13,18 +13,29 @@ pub enum BinOp {
     Le,
 }
 
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub enum Node {
+#[derive(Clone)]
+pub struct LVar<'source> {
+    name: &'source str,
+    offset: usize,
+}
+
+impl<'source> LVar<'source> {
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+pub enum Node<'source> {
     BinExpr {
         op: BinOp,
-        lhs: Box<Node>,
-        rhs: Box<Node>,
+        lhs: Box<Node<'source>>,
+        rhs: Box<Node<'source>>,
     },
     Num(i32),
-    Ident(u32),
+    Ident(LVar<'source>),
     Assign {
-        lhs: Box<Node>,
-        rhs: Box<Node>,
+        lhs: Box<Node<'source>>,
+        rhs: Box<Node<'source>>,
     },
 }
 
@@ -104,6 +115,28 @@ impl<'source> std::iter::Iterator for Tokens<'source> {
 
     fn next(&mut self) -> Option<Self::Item> {
         std::mem::replace(&mut self.peek, self.lexer.next())
+    }
+}
+
+pub struct ParserContext<'source> {
+    locals: Vec<LVar<'source>>,
+}
+
+impl<'source> ParserContext<'source> {
+    fn new() -> Self {
+        Self { locals: Vec::new() }
+    }
+
+    fn find_or_declare(&mut self, name: &'source str) -> LVar<'source> {
+        if let Some(lvar) = self.locals.iter().find(|l| l.name == name) {
+            return lvar.clone();
+        }
+        let lvar = LVar {
+            name: name,
+            offset: (self.locals.len() + 1) * 8,
+        };
+        self.locals.push(lvar.clone());
+        lvar
     }
 }
 
@@ -189,46 +222,55 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_primary(&mut self) -> Result<Node, Error<'source>> {
+    fn parse_primary(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
         let (token, loc) = self.next_token("primary expression")?;
         match token {
             Token::Reserved("(") => {
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr(ctx)?;
                 self.expect_reserved(")", "closing ')'")?;
                 Ok(expr)
             }
             Token::Num(v) => Ok(Node::Num(v)),
-            Token::Ident(c) => Ok(Node::Ident((c as u32 - 'a' as u32 + 1) * 8)),
+            Token::Ident(s) => Ok(Node::Ident(ctx.find_or_declare(s))),
             _ => self.unexpected_token("primary expression", token, loc),
         }
     }
 
-    fn parse_unary(&mut self) -> Result<Node, Error<'source>> {
+    fn parse_unary(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
         if self.consume_reserved("+", "unary '+'")?.is_some() {
-            return self.parse_primary();
+            return self.parse_primary(ctx);
         }
         if self.consume_reserved("-", "unary '-'")?.is_some() {
             return Ok(Node::BinExpr {
                 op: BinOp::Sub,
                 lhs: Box::new(Node::Num(0)),
-                rhs: self.parse_primary().map(Box::new)?,
+                rhs: self.parse_primary(ctx).map(Box::new)?,
             });
         }
-        self.parse_primary()
+        self.parse_primary(ctx)
     }
 
-    fn parse_mul(&mut self) -> Result<Node, Error<'source>> {
-        let mut mul = self.parse_unary()?;
+    fn parse_mul(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
+        let mut mul = self.parse_unary(ctx)?;
         loop {
             if self.consume_reserved("*", "operator '*'")?.is_some() {
-                let rhs = self.parse_unary()?;
+                let rhs = self.parse_unary(ctx)?;
                 mul = Node::BinExpr {
                     op: BinOp::Mul,
                     lhs: Box::new(mul),
                     rhs: Box::new(rhs),
                 };
             } else if self.consume_reserved("/", "operator '/'")?.is_some() {
-                let rhs = self.parse_unary()?;
+                let rhs = self.parse_unary(ctx)?;
                 mul = Node::BinExpr {
                     op: BinOp::Div,
                     lhs: Box::new(mul),
@@ -241,18 +283,21 @@ impl<'source> Parser<'source> {
         Ok(mul)
     }
 
-    fn parse_add(&mut self) -> Result<Node, Error<'source>> {
-        let mut expr = self.parse_mul()?;
+    fn parse_add(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
+        let mut expr = self.parse_mul(ctx)?;
         loop {
             if self.consume_reserved("+", "operator '+'")?.is_some() {
-                let rhs = self.parse_mul()?;
+                let rhs = self.parse_mul(ctx)?;
                 expr = Node::BinExpr {
                     op: BinOp::Add,
                     lhs: Box::new(expr),
                     rhs: Box::new(rhs),
                 };
             } else if self.consume_reserved("-", "operator '-'")?.is_some() {
-                let rhs = self.parse_mul()?;
+                let rhs = self.parse_mul(ctx)?;
                 expr = Node::BinExpr {
                     op: BinOp::Sub,
                     lhs: Box::new(expr),
@@ -265,24 +310,27 @@ impl<'source> Parser<'source> {
         Ok(expr)
     }
 
-    fn parse_relational(&mut self) -> Result<Node, Error<'source>> {
-        let mut add = self.parse_add()?;
+    fn parse_relational(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
+        let mut add = self.parse_add(ctx)?;
         loop {
             let rhs;
             let op;
             if self.consume_reserved(">", "operator '>'")?.is_some() {
                 rhs = add;
-                add = self.parse_add()?;
+                add = self.parse_add(ctx)?;
                 op = BinOp::Lt;
             } else if self.consume_reserved(">=", "operator '>='")?.is_some() {
                 rhs = add;
-                add = self.parse_add()?;
+                add = self.parse_add(ctx)?;
                 op = BinOp::Le;
             } else if self.consume_reserved("<", "operator '<'")?.is_some() {
-                rhs = self.parse_add()?;
+                rhs = self.parse_add(ctx)?;
                 op = BinOp::Lt;
             } else if self.consume_reserved("<=", "operator '<='")?.is_some() {
-                rhs = self.parse_add()?;
+                rhs = self.parse_add(ctx)?;
                 op = BinOp::Le;
             } else {
                 break;
@@ -296,16 +344,19 @@ impl<'source> Parser<'source> {
         Ok(add)
     }
 
-    fn parse_equality(&mut self) -> Result<Node, Error<'source>> {
-        let mut rel = self.parse_relational()?;
+    fn parse_equality(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
+        let mut rel = self.parse_relational(ctx)?;
         loop {
             let rhs;
             let op;
             if self.consume_reserved("==", "operator '=='")?.is_some() {
-                rhs = self.parse_relational()?;
+                rhs = self.parse_relational(ctx)?;
                 op = BinOp::Eq;
             } else if self.consume_reserved("!=", "operator '!='")?.is_some() {
-                rhs = self.parse_relational()?;
+                rhs = self.parse_relational(ctx)?;
                 op = BinOp::Ne;
             } else {
                 break;
@@ -319,13 +370,16 @@ impl<'source> Parser<'source> {
         Ok(rel)
     }
 
-    fn parse_assign(&mut self) -> Result<Node, Error<'source>> {
-        let equality = self.parse_equality()?;
+    fn parse_assign(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
+        let equality = self.parse_equality(ctx)?;
         if self
             .consume_reserved("=", "assignment operator '='")?
             .is_some()
         {
-            let value = self.parse_assign()?;
+            let value = self.parse_assign(ctx)?;
             return Ok(Node::Assign {
                 lhs: Box::new(equality),
                 rhs: Box::new(value),
@@ -334,12 +388,18 @@ impl<'source> Parser<'source> {
         Ok(equality)
     }
 
-    fn parse_expr(&mut self) -> Result<Node, Error<'source>> {
-        self.parse_assign()
+    fn parse_expr(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
+        self.parse_assign(ctx)
     }
 
-    fn parse_statement(&mut self) -> Result<Node, Error<'source>> {
-        let expr = self.parse_expr()?;
+    fn parse_statement(
+        &mut self,
+        ctx: &mut ParserContext<'source>,
+    ) -> Result<Node<'source>, Error<'source>> {
+        let expr = self.parse_expr(ctx)?;
         self.expect_reserved(";", "';'")?;
         Ok(expr)
     }
@@ -348,10 +408,11 @@ impl<'source> Parser<'source> {
         self.tokens.peek().is_none()
     }
 
-    pub fn parse_program(&mut self) -> Result<Vec<Node>, Error<'source>> {
+    pub fn parse_program(&mut self) -> Result<Vec<Node<'source>>, Error<'source>> {
+        let mut context = ParserContext::new();
         let mut stmts = Vec::new();
         while !self.at_eof() {
-            stmts.push(self.parse_statement()?);
+            stmts.push(self.parse_statement(&mut context)?);
         }
         Ok(stmts)
     }

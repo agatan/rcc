@@ -39,7 +39,7 @@ impl<'a> std::fmt::Display for LexError<'a> {
 pub enum Token<'a> {
     Reserved(&'a str),
     Num(i32),
-    Ident(char),
+    Ident(&'a str),
 }
 
 impl<'a> std::fmt::Display for Token<'a> {
@@ -47,7 +47,7 @@ impl<'a> std::fmt::Display for Token<'a> {
         match self {
             Token::Reserved(s) => write!(f, "keyword {:?}", s),
             Token::Num(i) => write!(f, "{}", i),
-            Token::Ident(ch) => write!(f, "'{}'", ch),
+            Token::Ident(s) => write!(f, "identifier {}", s),
         }
     }
 }
@@ -198,8 +198,13 @@ impl<'a> Lexer<'a> {
             return Ok(Some(self.new_reserved(offset, offset + 1)));
         }
 
-        if let Some(c) = self.eat_if(|c| 'a' <= c && c <= 'z') {
-            return Ok(Some((Token::Ident(c), Location::Span(offset, offset + 1))));
+        if self.eat_if(|c| 'a' <= c && c <= 'z').is_some() {
+            while self.eat_if(|c| c.is_ascii_alphanumeric()).is_some() {}
+            let end = self.offset();
+            return Ok(Some((
+                Token::Ident(&self.source[offset..end]),
+                Location::Span(offset, end),
+            )));
         }
 
         if let Some(token) = self.lex_number() {

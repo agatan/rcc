@@ -48,6 +48,7 @@ assert 1 "2 >= 1;"
 
 assert 0 "a = 1; b = 2; b - a * 2;"
 assert 0 "a = 1; b = 2; c = b - a; b = 1; b - c;"
+assert 0 "foo = 1; bar = foo + 1; foo * 2 - bar;"
 
 echo OK
 '''
