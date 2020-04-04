@@ -203,7 +203,7 @@ impl<'source> Parser<'source> {
         expected: &'static str,
     ) -> Result<Option<(Token, Location)>, Error<'source>> {
         match self.peek()? {
-            Some((Token::Reserved(s), _)) if s == &keyword => {
+            Some((Token::Operator(s), _)) if s == &keyword => {
                 let (token, loc) = self.next_token(expected)?;
                 Ok(Some((token, loc)))
             }
@@ -217,7 +217,7 @@ impl<'source> Parser<'source> {
         expected: &'static str,
     ) -> Result<(Token, Location), Error<'source>> {
         match self.next_token(expected)? {
-            (Token::Reserved(s), loc) if &s == &keyword => Ok((Token::Reserved(s), loc)),
+            (Token::Operator(s), loc) if &s == &keyword => Ok((Token::Operator(s), loc)),
             (t, loc) => self.unexpected_token(expected, t, loc),
         }
     }
@@ -228,7 +228,7 @@ impl<'source> Parser<'source> {
     ) -> Result<Node<'source>, Error<'source>> {
         let (token, loc) = self.next_token("primary expression")?;
         match token {
-            Token::Reserved("(") => {
+            Token::Operator("(") => {
                 let expr = self.parse_expr(ctx)?;
                 self.expect_reserved(")", "closing ')'")?;
                 Ok(expr)

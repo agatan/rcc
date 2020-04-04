@@ -37,17 +37,19 @@ impl<'a> std::fmt::Display for LexError<'a> {
 
 #[derive(PartialEq)]
 pub enum Token<'a> {
-    Reserved(&'a str),
+    Operator(&'a str),
     Num(i32),
     Ident(&'a str),
+    Return,
 }
 
 impl<'a> std::fmt::Display for Token<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Token::Reserved(s) => write!(f, "keyword {:?}", s),
+            Token::Operator(s) => write!(f, "operator {:?}", s),
             Token::Num(i) => write!(f, "{}", i),
             Token::Ident(s) => write!(f, "identifier {}", s),
+            Token::Return => f.write_str("keyword 'return'"),
         }
     }
 }
@@ -146,11 +148,20 @@ impl<'a> Lexer<'a> {
         Some((Token::Num(v), Location::Span(start, end)))
     }
 
-    fn new_reserved(&self, start: usize, end: usize) -> (Token<'a>, Location) {
+    fn new_operator(&self, start: usize, end: usize) -> (Token<'a>, Location) {
         (
-            Token::Reserved(&self.source[start..end]),
+            Token::Operator(&self.source[start..end]),
             Location::Span(start, end),
         )
+    }
+
+    fn new_identifier(&self, start: usize, end: usize) -> (Token<'a>, Location) {
+        let name = &self.source[start..end];
+        let loc = Location::Span(start, end);
+        if name == "return" {
+            return (Token::Return, loc);
+        }
+        (Token::Ident(name), loc)
     }
 
     pub fn lex(&mut self) -> LexResult<'a> {
@@ -159,7 +170,7 @@ impl<'a> Lexer<'a> {
         let offset = self.offset();
 
         if self.eat_char(';') {
-            return Ok(Some(self.new_reserved(offset, offset + 1)));
+            return Ok(Some(self.new_operator(offset, offset + 1)));
         }
 
         if self.eat_char('+')
@@ -170,41 +181,38 @@ impl<'a> Lexer<'a> {
             || self.eat_char(')')
         {
             return Ok(Some((
-                Token::Reserved(&self.source[offset..offset + 1]),
+                Token::Operator(&self.source[offset..offset + 1]),
                 Location::Span(offset, offset + 1),
             )));
         }
 
         if self.eat_char('=') {
             if self.eat_char('=') {
-                return Ok(Some(self.new_reserved(offset, offset + 2)));
+                return Ok(Some(self.new_operator(offset, offset + 2)));
             }
-            return Ok(Some(self.new_reserved(offset, offset + 1)));
+            return Ok(Some(self.new_operator(offset, offset + 1)));
         }
         if self.eat_char('!') {
             self.expect_char('=')?;
-            return Ok(Some(self.new_reserved(offset, offset + 2)));
+            return Ok(Some(self.new_operator(offset, offset + 2)));
         }
         if self.eat_char('<') {
             if self.eat_char('=') {
-                return Ok(Some(self.new_reserved(offset, offset + 2)));
+                return Ok(Some(self.new_operator(offset, offset + 2)));
             }
-            return Ok(Some(self.new_reserved(offset, offset + 1)));
+            return Ok(Some(self.new_operator(offset, offset + 1)));
         }
         if self.eat_char('>') {
             if self.eat_char('=') {
-                return Ok(Some(self.new_reserved(offset, offset + 2)));
+                return Ok(Some(self.new_operator(offset, offset + 2)));
             }
-            return Ok(Some(self.new_reserved(offset, offset + 1)));
+            return Ok(Some(self.new_operator(offset, offset + 1)));
         }
 
         if self.eat_if(|c| 'a' <= c && c <= 'z').is_some() {
             while self.eat_if(|c| c.is_ascii_alphanumeric()).is_some() {}
             let end = self.offset();
-            return Ok(Some((
-                Token::Ident(&self.source[offset..end]),
-                Location::Span(offset, end),
-            )));
+            return Ok(Some(self.new_identifier(offset, end)));
         }
 
         if let Some(token) = self.lex_number() {
