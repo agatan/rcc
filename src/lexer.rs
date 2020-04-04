@@ -158,6 +158,10 @@ impl<'a> Lexer<'a> {
 
         let offset = self.offset();
 
+        if self.eat_char(';') {
+            return Ok(Some(self.new_reserved(offset, offset + 1)));
+        }
+
         if self.eat_char('+')
             || self.eat_char('-')
             || self.eat_char('*')
