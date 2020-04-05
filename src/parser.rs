@@ -33,6 +33,10 @@ pub enum Node<'source> {
     },
     Num(i32),
     Ident(LVar<'source>),
+    Call {
+        function_name: &'source str,
+        args: Vec<Node<'source>>,
+    },
     Assign {
         lhs: Box<Node<'source>>,
         rhs: Box<Node<'source>>,
@@ -251,7 +255,26 @@ impl<'source> Parser<'source> {
                 Ok(expr)
             }
             Token::Num(v) => Ok(Node::Num(v)),
-            Token::Ident(s) => Ok(Node::Ident(ctx.find_or_declare(s))),
+            Token::Ident(s) => {
+                if let Some((Token::Operator("("), _)) = self.peek()? {
+                    self.next_token("opening '('")?;
+                    let mut args = Vec::new();
+                    loop {
+                        if let Some((Token::Operator(")"), _)) = self.peek()? {
+                            self.next_token("closing ')'")?;
+                            break;
+                        }
+                        self.expect_operator(",", "','")?;
+                        let arg = self.parse_expr(ctx)?;
+                        args.push(arg);
+                    }
+                    return Ok(Node::Call {
+                        function_name: s,
+                        args,
+                    });
+                }
+                Ok(Node::Ident(ctx.find_or_declare(s)))
+            }
             _ => self.unexpected_token("primary expression", token, loc),
         }
     }

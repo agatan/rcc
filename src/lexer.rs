@@ -202,6 +202,7 @@ impl<'a> Lexer<'a> {
             || self.eat_char(')')
             || self.eat_char('{')
             || self.eat_char('}')
+            || self.eat_char(',')
         {
             return Ok(Some((
                 Token::Operator(&self.source[offset..offset + 1]),
@@ -233,7 +234,7 @@ impl<'a> Lexer<'a> {
         }
 
         if self.eat_if(|c| 'a' <= c && c <= 'z').is_some() {
-            while self.eat_if(|c| c.is_ascii_alphanumeric()).is_some() {}
+            while self.eat_if(|c| c.is_ascii_alphanumeric() || c == '_').is_some() {}
             let end = self.offset();
             return Ok(Some(self.new_identifier(offset, end)));
         }

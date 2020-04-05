@@ -121,6 +121,9 @@ impl CompileContext {
                 println!("  mov rax, [rax]");
                 self.emit_push_reg("rax");
             }
+            Node::Call { function_name, args: _args } => {
+                println!("  call {}", function_name);
+            }
             Node::Return(value) => {
                 self.gen(*value)?;
                 self.emit_pop("rax");
