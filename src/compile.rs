@@ -44,6 +44,17 @@ impl CompileContext {
         println!("  push {}", reg);
     }
 
+    fn emit_call(&self, name: &str) {
+        if self.rsp_alignment % 16 != 0 {
+            debug_assert!(self.rsp_alignment % 8 == 0);
+            println!("  add rsp, 8");
+            println!("  call {}", name);
+            println!("  sub rsp, 8");
+        } else {
+            println!("  call {}", name);
+        }
+    }
+
     fn next_label(&mut self, key: &'static str) -> String {
         let id = self.last_label_id + 1;
         self.last_label_id = id;
@@ -121,14 +132,20 @@ impl CompileContext {
                 println!("  mov rax, [rax]");
                 self.emit_push_reg("rax");
             }
-            Node::Call { function_name, args} => {
-                assert!(args.len() <= 6, "rcc doesn't support function calls with more than 6 arguments yet.");
+            Node::Call {
+                function_name,
+                args,
+            } => {
+                assert!(
+                    args.len() <= 6,
+                    "rcc doesn't support function calls with more than 6 arguments yet."
+                );
                 let registered = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
                 for (arg, reg) in args.into_iter().zip(&registered) {
                     self.gen(arg)?;
                     self.emit_pop(reg);
                 }
-                println!("  call {}", function_name);
+                self.emit_call(function_name);
                 self.emit_push_reg("rax");
             }
             Node::Return(value) => {
@@ -245,7 +262,6 @@ impl CompileContext {
         Ok(())
     }
 }
-
 
 pub fn gen_program(nodes: Vec<Node>) -> Result<(), Error> {
     CompileContext::new().gen_program(nodes)
