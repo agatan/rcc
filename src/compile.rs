@@ -157,7 +157,35 @@ fn gen(node: Node, ctx: &mut CompileContext) -> Result<(), Error> {
             gen(*statement, ctx)?;
             println!("  jmp {}", start_label);
             println!("{}:", end_label);
-        },
+        }
+        Node::For {
+            init_expr,
+            condition_expr,
+            update_expr,
+            body,
+        } => {
+            let begin = ctx.next_label("for");
+            let endfor = ctx.next_label("endfor");
+            if let Some(init_expr) = init_expr {
+                gen(*init_expr, ctx)?;
+                println!("  pop rax");
+            }
+            println!("{}:", begin);
+            if let Some(condition_expr) = condition_expr {
+                gen(*condition_expr, ctx)?;
+                println!("  pop rax");
+                println!("  cmp rax, 0");
+                println!("  je {}", endfor);
+            }
+            gen(*body, ctx)?;
+            println!("  pop rax");
+            if let Some(update_expr) = update_expr {
+                gen(*update_expr, ctx)?;
+                println!(" pop rax");
+            }
+            println!("  jmp {}", begin);
+            println!("{}:", endfor);
+        }
         Node::CompoundStatements(stmts) => {
             for stmt in stmts {
                 gen(stmt, ctx)?;

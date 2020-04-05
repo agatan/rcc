@@ -47,6 +47,12 @@ pub enum Node<'source> {
         condition: Box<Node<'source>>,
         statement: Box<Node<'source>>,
     },
+    For {
+        init_expr: Option<Box<Node<'source>>>,
+        condition_expr: Option<Box<Node<'source>>>,
+        update_expr: Option<Box<Node<'source>>>,
+        body: Box<Node<'source>>,
+    },
     CompoundStatements(Vec<Node<'source>>),
 }
 
@@ -448,6 +454,35 @@ impl<'source> Parser<'source> {
                 Ok(Node::While {
                     condition: Box::new(condition),
                     statement: Box::new(stmt),
+                })
+            }
+            Some((Token::For, _)) => {
+                self.next_token("keyword 'for'")?;
+                self.expect_operator("(", "opening '('")?;
+                let init_expr = if let Some((Token::Operator(";"), _)) = self.peek()? {
+                    None
+                } else {
+                    self.parse_expr(ctx).map(|expr| Some(Box::new(expr)))?
+                };
+                self.next_token("operator ';'")?;
+                let condition_expr = if let Some((Token::Operator(";"), _)) = self.peek()? {
+                    None
+                } else {
+                    self.parse_expr(ctx).map(|expr| Some(Box::new(expr)))?
+                };
+                self.next_token("operator ';'")?;
+                let update_expr = if let Some((Token::Operator(")"), _)) = self.peek()? {
+                    None
+                } else {
+                    self.parse_expr(ctx).map(|expr| Some(Box::new(expr)))?
+                };
+                self.next_token("closing ')'")?;
+                let body = self.parse_statement(ctx).map(Box::new)?;
+                Ok(Node::For {
+                    init_expr,
+                    condition_expr,
+                    update_expr,
+                    body,
                 })
             }
             Some((Token::Operator("{"), _)) => {

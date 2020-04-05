@@ -44,6 +44,7 @@ pub enum Token<'a> {
     If,
     Else,
     While,
+    For,
 }
 
 impl<'a> std::fmt::Display for Token<'a> {
@@ -57,6 +58,7 @@ impl<'a> std::fmt::Display for Token<'a> {
             If => f.write_str("keyword 'if'"),
             Else => f.write_str("keyword 'else'"),
             While => f.write_str("keyword 'while'"),
+            For => f.write_str("keyword 'for'"),
         }
     }
 }
@@ -176,6 +178,9 @@ impl<'a> Lexer<'a> {
         }
         if name == "while" {
             return (Token::While, loc);
+        }
+        if name == "for" {
+            return (Token::For, loc);
         }
         (Token::Ident(name), loc)
     }
