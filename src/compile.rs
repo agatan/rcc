@@ -121,8 +121,15 @@ impl CompileContext {
                 println!("  mov rax, [rax]");
                 self.emit_push_reg("rax");
             }
-            Node::Call { function_name, args: _args } => {
+            Node::Call { function_name, args} => {
+                assert!(args.len() <= 6, "rcc doesn't support function calls with more than 6 arguments yet.");
+                let registered = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+                for (arg, reg) in args.into_iter().zip(&registered) {
+                    self.gen(arg)?;
+                    self.emit_pop(reg);
+                }
                 println!("  call {}", function_name);
+                self.emit_push_reg("rax");
             }
             Node::Return(value) => {
                 self.gen(*value)?;
