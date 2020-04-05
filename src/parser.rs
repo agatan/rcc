@@ -43,6 +43,10 @@ pub enum Node<'source> {
         then_expr: Box<Node<'source>>,
         else_expr: Option<Box<Node<'source>>>,
     },
+    While {
+        condition: Box<Node<'source>>,
+        statement: Box<Node<'source>>,
+    },
 }
 
 enum ErrorKind<'a> {
@@ -433,6 +437,17 @@ impl<'source> Parser<'source> {
                         else_expr: None,
                     })
                 }
+            }
+            Some((Token::While, _)) => {
+                self.next_token("keyword 'while'")?;
+                self.expect_operator("(", "openinig '('")?;
+                let condition = self.parse_expr(ctx)?;
+                self.expect_operator(")", "closing ')'")?;
+                let stmt = self.parse_statement(ctx)?;
+                Ok(Node::While {
+                    condition: Box::new(condition),
+                    statement: Box::new(stmt),
+                })
             }
             _ => {
                 let expr = self.parse_expr(ctx)?;

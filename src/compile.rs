@@ -143,6 +143,21 @@ fn gen(node: Node, ctx: &mut CompileContext) -> Result<(), Error> {
             // endif
             println!("{}:", endif_label);
         }
+        Node::While {
+            condition,
+            statement,
+        } => {
+            let start_label = ctx.next_label("while");
+            let end_label = ctx.next_label("endwhile");
+            println!("{}:", start_label);
+            gen(*condition, ctx)?;
+            println!("  pop rax");
+            println!("  cmp rax, 0");
+            println!("  je {}", end_label);
+            gen(*statement, ctx)?;
+            println!("  jmp {}", start_label);
+            println!("{}:", end_label);
+        }
     }
     Ok(())
 }

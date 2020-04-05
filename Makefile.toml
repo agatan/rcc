@@ -8,7 +8,7 @@ assert() {
 
   ./target/debug/rcc "$input" > tmp.s
   set +e
-  docker run --rm -v $PWD:/workdir -w /workdir gcc:9.3.0 bash -c "cc -o tmp tmp.s && ./tmp"
+  docker run --rm -v $PWD:/workdir -w /workdir gcc:9.3.0 bash -c "gcc -fstack-protector -o tmp tmp.s && ./tmp"
   actual="$?"
   set -e
   rm tmp.s tmp
@@ -55,6 +55,8 @@ assert 5 "a1 = 1; a2 = 2; return a1 + a2 * 2;"
 
 assert 1 "if(1) return 1; else return 2;"
 assert 2 "if(0) return 1; else return 2;"
+
+assert 5 "a = 0; while (a < 5) a = a + 1; return a;"
 
 echo OK
 
