@@ -47,6 +47,7 @@ pub enum Node<'source> {
         condition: Box<Node<'source>>,
         statement: Box<Node<'source>>,
     },
+    CompoundStatements(Vec<Node<'source>>),
 }
 
 enum ErrorKind<'a> {
@@ -448,6 +449,19 @@ impl<'source> Parser<'source> {
                     condition: Box::new(condition),
                     statement: Box::new(stmt),
                 })
+            }
+            Some((Token::Operator("{"), _)) => {
+                self.next_token("operator '{'")?;
+                let mut stmts = Vec::new();
+                loop {
+                    if let Some((Token::Operator("}"), _)) = self.peek()? {
+                        self.next_token("operator '}'")?;
+                        break;
+                    }
+                    let stmt = self.parse_statement(ctx)?;
+                    stmts.push(stmt);
+                }
+                Ok(Node::CompoundStatements(stmts))
             }
             _ => {
                 let expr = self.parse_expr(ctx)?;

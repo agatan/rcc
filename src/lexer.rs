@@ -195,6 +195,8 @@ impl<'a> Lexer<'a> {
             || self.eat_char('/')
             || self.eat_char('(')
             || self.eat_char(')')
+            || self.eat_char('{')
+            || self.eat_char('}')
         {
             return Ok(Some((
                 Token::Operator(&self.source[offset..offset + 1]),

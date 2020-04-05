@@ -157,6 +157,12 @@ fn gen(node: Node, ctx: &mut CompileContext) -> Result<(), Error> {
             gen(*statement, ctx)?;
             println!("  jmp {}", start_label);
             println!("{}:", end_label);
+        },
+        Node::CompoundStatements(stmts) => {
+            for stmt in stmts {
+                gen(stmt, ctx)?;
+                println!("  pop rax");
+            }
         }
     }
     Ok(())

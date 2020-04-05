@@ -57,6 +57,7 @@ assert 1 "if(1) return 1; else return 2;"
 assert 2 "if(0) return 1; else return 2;"
 
 assert 5 "a = 0; while (a < 5) a = a + 1; return a;"
+assert 15 "a = 0; b = 0; while (b < 5) { b = b + 1; a = a + b; } return a;"
 
 echo OK
 
