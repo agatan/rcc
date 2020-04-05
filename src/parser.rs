@@ -38,6 +38,11 @@ pub enum Node<'source> {
         rhs: Box<Node<'source>>,
     },
     Return(Box<Node<'source>>),
+    IfElse {
+        condition: Box<Node<'source>>,
+        then_expr: Box<Node<'source>>,
+        else_expr: Option<Box<Node<'source>>>,
+    },
 }
 
 enum ErrorKind<'a> {
@@ -400,15 +405,41 @@ impl<'source> Parser<'source> {
         &mut self,
         ctx: &mut ParserContext<'source>,
     ) -> Result<Node<'source>, Error<'source>> {
-        let node = if let Some((Token::Return, _)) = self.peek()? {
-            self.next_token("keyword 'return'")?;
-            let value = self.parse_expr(ctx)?;
-            Node::Return(Box::new(value))
-        } else {
-            self.parse_expr(ctx)?
-        };
-        self.expect_operator(";", "';'")?;
-        Ok(node)
+        match self.peek()? {
+            Some((Token::Return, _)) => {
+                self.next_token("keyword 'return'")?;
+                let value = self.parse_expr(ctx)?;
+                self.expect_operator(";", "';'")?;
+                Ok(Node::Return(Box::new(value)))
+            }
+            Some((Token::If, _)) => {
+                self.next_token("keyword 'if'")?;
+                self.expect_operator("(", "opening '('")?;
+                let condition = self.parse_expr(ctx)?;
+                self.expect_operator(")", "opening ')'")?;
+                let then_else = self.parse_statement(ctx)?;
+                if let Some((Token::Else, _)) = self.peek()? {
+                    self.next_token("keyword 'else'")?;
+                    let else_expr = self.parse_statement(ctx)?;
+                    Ok(Node::IfElse {
+                        condition: Box::new(condition),
+                        then_expr: Box::new(then_else),
+                        else_expr: Some(Box::new(else_expr)),
+                    })
+                } else {
+                    Ok(Node::IfElse {
+                        condition: Box::new(condition),
+                        then_expr: Box::new(then_else),
+                        else_expr: None,
+                    })
+                }
+            }
+            _ => {
+                let expr = self.parse_expr(ctx)?;
+                self.expect_operator(";", "';'")?;
+                Ok(expr)
+            }
+        }
     }
 
     fn at_eof(&self) -> bool {

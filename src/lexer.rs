@@ -41,15 +41,20 @@ pub enum Token<'a> {
     Num(i32),
     Ident(&'a str),
     Return,
+    If,
+    Else,
 }
 
 impl<'a> std::fmt::Display for Token<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use Token::*;
         match self {
-            Token::Operator(s) => write!(f, "operator {:?}", s),
-            Token::Num(i) => write!(f, "{}", i),
-            Token::Ident(s) => write!(f, "identifier {}", s),
-            Token::Return => f.write_str("keyword 'return'"),
+            Operator(s) => write!(f, "operator {:?}", s),
+            Num(i) => write!(f, "{}", i),
+            Ident(s) => write!(f, "identifier {}", s),
+            Return => f.write_str("keyword 'return'"),
+            If => f.write_str("keyword 'if'"),
+            Else => f.write_str("keyword 'else'"),
         }
     }
 }
@@ -160,6 +165,12 @@ impl<'a> Lexer<'a> {
         let loc = Location::Span(start, end);
         if name == "return" {
             return (Token::Return, loc);
+        }
+        if name == "if" {
+            return (Token::If, loc);
+        }
+        if name == "else" {
+            return (Token::Else, loc);
         }
         (Token::Ident(name), loc)
     }

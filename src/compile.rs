@@ -16,6 +16,22 @@ impl std::fmt::Display for Error {
     }
 }
 
+struct CompileContext {
+    last_label_id: usize,
+}
+
+impl CompileContext {
+    fn new() -> Self {
+        CompileContext { last_label_id: 0 }
+    }
+
+    fn next_label(&mut self, key: &'static str) -> String {
+        let id = self.last_label_id + 1;
+        self.last_label_id = id;
+        format!(".L{}{}", key, id)
+    }
+}
+
 fn gen_lval(node: Node) -> Result<(), Error> {
     let lvar = match node {
         Node::Ident(lvar) => lvar,
@@ -31,15 +47,15 @@ fn gen_lval(node: Node) -> Result<(), Error> {
     Ok(())
 }
 
-fn gen(node: Node) -> Result<(), Error> {
+fn gen(node: Node, ctx: &mut CompileContext) -> Result<(), Error> {
     match node {
         Node::Num(v) => {
             println!("  push {}", v);
             return Ok(());
         }
         Node::BinExpr { op, lhs, rhs } => {
-            gen(*lhs)?;
-            gen(*rhs)?;
+            gen(*lhs, ctx)?;
+            gen(*rhs, ctx)?;
             println!("  pop rdi");
             println!("  pop rax");
             match op {
@@ -75,7 +91,7 @@ fn gen(node: Node) -> Result<(), Error> {
         }
         Node::Assign { lhs, rhs } => {
             gen_lval(*lhs)?;
-            gen(*rhs)?;
+            gen(*rhs, ctx)?;
             println!("  pop rdi");
             println!("  pop rax");
             println!("  mov [rax], rdi");
@@ -88,17 +104,52 @@ fn gen(node: Node) -> Result<(), Error> {
             println!("  push rax");
         }
         Node::Return(value) => {
-            gen(*value)?;
+            gen(*value, ctx)?;
             println!("  pop rax");
             println!("  mov rsp, rbp");
             println!("  pop rbp");
             println!("  ret");
+        }
+        Node::IfElse {
+            condition,
+            then_expr,
+            else_expr: None,
+        } => {
+            gen(*condition, ctx)?;
+            println!("  pop rax");
+            println!("  cmp rax, 0");
+            let end_label = ctx.next_label("endif");
+            println!("  je {}", end_label);
+            gen(*then_expr, ctx)?;
+            println!("{}:", end_label);
+        }
+        Node::IfElse {
+            condition,
+            then_expr,
+            else_expr: Some(else_expr),
+        } => {
+            gen(*condition, ctx)?;
+            println!("  pop rax");
+            println!("  cmp rax, 0");
+            let else_label = ctx.next_label("else");
+            let endif_label = ctx.next_label("endif");
+            println!("  je {}", else_label);
+            // then
+            gen(*then_expr, ctx)?;
+            println!("  jmp {}", endif_label);
+            // else
+            println!("{}:", else_label);
+            gen(*else_expr, ctx)?;
+            // endif
+            println!("{}:", endif_label);
         }
     }
     Ok(())
 }
 
 pub fn gen_program(stmts: Vec<Node>) -> Result<(), Error> {
+    let mut ctx = CompileContext::new();
+
     println!(".intel_syntax noprefix");
     println!(".global main");
     println!("main:");
@@ -109,7 +160,7 @@ pub fn gen_program(stmts: Vec<Node>) -> Result<(), Error> {
     println!("  sub rsp, 208");
 
     for node in stmts {
-        gen(node)?;
+        gen(node, &mut ctx)?;
         println!("  pop rax");
     }
 
