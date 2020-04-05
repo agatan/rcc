@@ -16,13 +16,32 @@ impl std::fmt::Display for Error {
     }
 }
 
-struct CompileContext {
+pub struct CompileContext {
     last_label_id: usize,
+    rsp_alignment: isize,
 }
 
 impl CompileContext {
-    fn new() -> Self {
-        CompileContext { last_label_id: 0 }
+    pub fn new() -> Self {
+        CompileContext {
+            last_label_id: 0,
+            rsp_alignment: 0,
+        }
+    }
+
+    fn emit_pop(&mut self, reg: &str) {
+        self.rsp_alignment -= 8;
+        println!("  pop {}", reg);
+    }
+
+    fn emit_push_value(&mut self, value: i32) {
+        self.rsp_alignment += 8;
+        println!("  push {}", value);
+    }
+
+    fn emit_push_reg(&mut self, reg: &str) {
+        self.rsp_alignment += 8;
+        println!("  push {}", reg);
     }
 
     fn next_label(&mut self, key: &'static str) -> String {
@@ -30,191 +49,194 @@ impl CompileContext {
         self.last_label_id = id;
         format!(".L{}{}", key, id)
     }
-}
 
-fn gen_lval(node: Node) -> Result<(), Error> {
-    let lvar = match node {
-        Node::Ident(lvar) => lvar,
-        _ => {
-            return Err(Error {
-                kind: ErrorKind::AssignmentToRValue,
-            });
-        }
-    };
-    println!("  mov rax, rbp");
-    println!("  sub rax, {}", lvar.offset());
-    println!("  push rax");
-    Ok(())
-}
+    fn gen_lval(&mut self, node: Node) -> Result<(), Error> {
+        let lvar = match node {
+            Node::Ident(lvar) => lvar,
+            _ => {
+                return Err(Error {
+                    kind: ErrorKind::AssignmentToRValue,
+                });
+            }
+        };
+        println!("  mov rax, rbp");
+        println!("  sub rax, {}", lvar.offset());
+        self.emit_push_reg("rax");
+        Ok(())
+    }
 
-fn gen(node: Node, ctx: &mut CompileContext) -> Result<(), Error> {
-    match node {
-        Node::Num(v) => {
-            println!("  push {}", v);
-            return Ok(());
-        }
-        Node::BinExpr { op, lhs, rhs } => {
-            gen(*lhs, ctx)?;
-            gen(*rhs, ctx)?;
-            println!("  pop rdi");
-            println!("  pop rax");
-            match op {
-                BinOp::Add => println!("  add rax, rdi"),
-                BinOp::Sub => println!("  sub rax, rdi"),
-                BinOp::Mul => println!("  imul rax, rdi"),
-                BinOp::Div => {
-                    println!("  cqo");
-                    println!("  idiv rdi");
-                }
-                BinOp::Eq => {
-                    println!("  cmp rax, rdi");
-                    println!("  sete al");
-                    println!("  movzb rax, al");
-                }
-                BinOp::Ne => {
-                    println!("  cmp rax, rdi");
-                    println!("  setne al");
-                    println!("  movzb rax, al");
-                }
-                BinOp::Lt => {
-                    println!("  cmp rax, rdi");
-                    println!("  setl al");
-                    println!("  movzb rax, al");
-                }
-                BinOp::Le => {
-                    println!("  cmp rax, rdi");
-                    println!("  setle al");
-                    println!("  movzb rax, al");
-                }
+    fn gen(&mut self, node: Node) -> Result<(), Error> {
+        match node {
+            Node::Num(v) => {
+                self.emit_push_value(v);
+                return Ok(());
             }
-            println!("  push rax");
-        }
-        Node::Assign { lhs, rhs } => {
-            gen_lval(*lhs)?;
-            gen(*rhs, ctx)?;
-            println!("  pop rdi");
-            println!("  pop rax");
-            println!("  mov [rax], rdi");
-            println!("  push rdi");
-        }
-        Node::Ident(_) => {
-            gen_lval(node)?;
-            println!("  pop rax");
-            println!("  mov rax, [rax]");
-            println!("  push rax");
-        }
-        Node::Return(value) => {
-            gen(*value, ctx)?;
-            println!("  pop rax");
-            println!("  mov rsp, rbp");
-            println!("  pop rbp");
-            println!("  ret");
-        }
-        Node::IfElse {
-            condition,
-            then_expr,
-            else_expr: None,
-        } => {
-            gen(*condition, ctx)?;
-            println!("  pop rax");
-            println!("  cmp rax, 0");
-            let end_label = ctx.next_label("endif");
-            println!("  je {}", end_label);
-            gen(*then_expr, ctx)?;
-            println!("{}:", end_label);
-        }
-        Node::IfElse {
-            condition,
-            then_expr,
-            else_expr: Some(else_expr),
-        } => {
-            gen(*condition, ctx)?;
-            println!("  pop rax");
-            println!("  cmp rax, 0");
-            let else_label = ctx.next_label("else");
-            let endif_label = ctx.next_label("endif");
-            println!("  je {}", else_label);
-            // then
-            gen(*then_expr, ctx)?;
-            println!("  jmp {}", endif_label);
-            // else
-            println!("{}:", else_label);
-            gen(*else_expr, ctx)?;
-            // endif
-            println!("{}:", endif_label);
-        }
-        Node::While {
-            condition,
-            statement,
-        } => {
-            let start_label = ctx.next_label("while");
-            let end_label = ctx.next_label("endwhile");
-            println!("{}:", start_label);
-            gen(*condition, ctx)?;
-            println!("  pop rax");
-            println!("  cmp rax, 0");
-            println!("  je {}", end_label);
-            gen(*statement, ctx)?;
-            println!("  jmp {}", start_label);
-            println!("{}:", end_label);
-        }
-        Node::For {
-            init_expr,
-            condition_expr,
-            update_expr,
-            body,
-        } => {
-            let begin = ctx.next_label("for");
-            let endfor = ctx.next_label("endfor");
-            if let Some(init_expr) = init_expr {
-                gen(*init_expr, ctx)?;
-                println!("  pop rax");
+            Node::BinExpr { op, lhs, rhs } => {
+                self.gen(*lhs)?;
+                self.gen(*rhs)?;
+                self.emit_pop("rdi");
+                self.emit_pop("rax");
+                match op {
+                    BinOp::Add => println!("  add rax, rdi"),
+                    BinOp::Sub => println!("  sub rax, rdi"),
+                    BinOp::Mul => println!("  imul rax, rdi"),
+                    BinOp::Div => {
+                        println!("  cqo");
+                        println!("  idiv rdi");
+                    }
+                    BinOp::Eq => {
+                        println!("  cmp rax, rdi");
+                        println!("  sete al");
+                        println!("  movzb rax, al");
+                    }
+                    BinOp::Ne => {
+                        println!("  cmp rax, rdi");
+                        println!("  setne al");
+                        println!("  movzb rax, al");
+                    }
+                    BinOp::Lt => {
+                        println!("  cmp rax, rdi");
+                        println!("  setl al");
+                        println!("  movzb rax, al");
+                    }
+                    BinOp::Le => {
+                        println!("  cmp rax, rdi");
+                        println!("  setle al");
+                        println!("  movzb rax, al");
+                    }
+                }
+                self.emit_push_reg("rax");
             }
-            println!("{}:", begin);
-            if let Some(condition_expr) = condition_expr {
-                gen(*condition_expr, ctx)?;
-                println!("  pop rax");
+            Node::Assign { lhs, rhs } => {
+                self.gen_lval(*lhs)?;
+                self.gen(*rhs)?;
+                self.emit_pop("rdi");
+                self.emit_pop("rax");
+                println!("  mov [rax], rdi");
+                self.emit_push_reg("rdi");
+            }
+            Node::Ident(_) => {
+                self.gen_lval(node)?;
+                self.emit_pop("rax");
+                println!("  mov rax, [rax]");
+                self.emit_push_reg("rax");
+            }
+            Node::Return(value) => {
+                self.gen(*value)?;
+                self.emit_pop("rax");
+                println!("  mov rsp, rbp");
+                self.emit_pop("rbp");
+                println!("  ret");
+            }
+            Node::IfElse {
+                condition,
+                then_expr,
+                else_expr: None,
+            } => {
+                self.gen(*condition)?;
+                self.emit_pop("rax");
                 println!("  cmp rax, 0");
-                println!("  je {}", endfor);
+                let end_label = self.next_label("endif");
+                println!("  je {}", end_label);
+                self.gen(*then_expr)?;
+                println!("{}:", end_label);
             }
-            gen(*body, ctx)?;
-            println!("  pop rax");
-            if let Some(update_expr) = update_expr {
-                gen(*update_expr, ctx)?;
-                println!(" pop rax");
+            Node::IfElse {
+                condition,
+                then_expr,
+                else_expr: Some(else_expr),
+            } => {
+                self.gen(*condition)?;
+                self.emit_pop("rax");
+                println!("  cmp rax, 0");
+                let else_label = self.next_label("else");
+                let endif_label = self.next_label("endif");
+                println!("  je {}", else_label);
+                // then
+                self.gen(*then_expr)?;
+                println!("  jmp {}", endif_label);
+                // else
+                println!("{}:", else_label);
+                self.gen(*else_expr)?;
+                // endif
+                println!("{}:", endif_label);
             }
-            println!("  jmp {}", begin);
-            println!("{}:", endfor);
+            Node::While {
+                condition,
+                statement,
+            } => {
+                let start_label = self.next_label("while");
+                let end_label = self.next_label("endwhile");
+                println!("{}:", start_label);
+                self.gen(*condition)?;
+                self.emit_pop("rax");
+                println!("  cmp rax, 0");
+                println!("  je {}", end_label);
+                self.gen(*statement)?;
+                println!("  jmp {}", start_label);
+                println!("{}:", end_label);
+            }
+            Node::For {
+                init_expr,
+                condition_expr,
+                update_expr,
+                body,
+            } => {
+                let begin = self.next_label("for");
+                let endfor = self.next_label("endfor");
+                if let Some(init_expr) = init_expr {
+                    self.gen(*init_expr)?;
+                    self.emit_pop("rax");
+                }
+                println!("{}:", begin);
+                if let Some(condition_expr) = condition_expr {
+                    self.gen(*condition_expr)?;
+                    self.emit_pop("rax");
+                    println!("  cmp rax, 0");
+                    println!("  je {}", endfor);
+                }
+                self.gen(*body)?;
+                self.emit_pop("rax");
+                if let Some(update_expr) = update_expr {
+                    self.gen(*update_expr)?;
+                    println!(" pop rax");
+                }
+                println!("  jmp {}", begin);
+                println!("{}:", endfor);
+            }
+            Node::CompoundStatements(stmts) => {
+                for stmt in stmts {
+                    self.gen(stmt)?;
+                    self.emit_pop("rax");
+                }
+            }
         }
-        Node::CompoundStatements(stmts) => {
-            for stmt in stmts {
-                gen(stmt, ctx)?;
-                println!("  pop rax");
-            }
-        }
+        Ok(())
     }
-    Ok(())
+
+    pub fn gen_program(&mut self, stmts: Vec<Node>) -> Result<(), Error> {
+        println!(".intel_syntax noprefix");
+        println!(".global main");
+        println!("main:");
+
+        // Allocate memory for 26 variables.
+        println!("  push rbp");
+        println!("  mov rbp, rsp");
+        println!("  sub rsp, 208");
+
+        for node in stmts {
+            self.gen(node)?;
+            self.emit_pop("rax");
+        }
+
+        println!("  mov rsp, rbp");
+        self.emit_pop("rbp");
+        println!("  ret");
+        Ok(())
+    }
 }
 
-pub fn gen_program(stmts: Vec<Node>) -> Result<(), Error> {
-    let mut ctx = CompileContext::new();
 
-    println!(".intel_syntax noprefix");
-    println!(".global main");
-    println!("main:");
-
-    // Allocate memory for 26 variables.
-    println!("  push rbp");
-    println!("  mov rbp, rsp");
-    println!("  sub rsp, 208");
-
-    for node in stmts {
-        gen(node, &mut ctx)?;
-        println!("  pop rax");
-    }
-
-    println!("  mov rsp, rbp");
-    println!("  pop rbp");
-    println!("  ret");
-    Ok(())
+pub fn gen_program(nodes: Vec<Node>) -> Result<(), Error> {
+    CompileContext::new().gen_program(nodes)
 }
