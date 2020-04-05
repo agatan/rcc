@@ -259,14 +259,18 @@ impl<'source> Parser<'source> {
                 if let Some((Token::Operator("("), _)) = self.peek()? {
                     self.next_token("opening '('")?;
                     let mut args = Vec::new();
-                    loop {
-                        if let Some((Token::Operator(")"), _)) = self.peek()? {
-                            self.next_token("closing ')'")?;
-                            break;
+                    if let Some((Token::Operator(")"), _)) = self.peek()? {
+                        self.next_token("closing ')'")?;
+                    } else {
+                        loop {
+                            let arg = self.parse_expr(ctx)?;
+                            args.push(arg);
+                            if let Some((Token::Operator(")"), _)) = self.peek()? {
+                                self.next_token("closing ')'")?;
+                                break;
+                            }
+                            self.expect_operator(",", "','")?;
                         }
-                        self.expect_operator(",", "','")?;
-                        let arg = self.parse_expr(ctx)?;
-                        args.push(arg);
                     }
                     return Ok(Node::Call {
                         function_name: s,
