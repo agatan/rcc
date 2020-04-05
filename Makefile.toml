@@ -1,6 +1,22 @@
-[tasks.run-test]
+[tasks.compile]
+dependencies = ["build"]
 script = [
-'cargo test',
+'''
+input="$1"
+out=$(mktemp ./tmp.XXXXX)
+echo "Compiling..."
+./target/debug/rcc "$input" > ${out}.s
+set +e
+echo "Start running..."
+docker run --rm -v $PWD:/workdir -w /workdir gcc:9.3.0 bash -c "gcc -fstack-protector -o $out ${out}.s prelude.c && $out"
+echo "=> exit with status $?"
+rm $out ${out}.s
+'''
+]
+
+[tasks.run-test]
+dependencies = ["build", "test"]
+script = [
 '''
 assert() {
   expected="$1"
@@ -21,7 +37,6 @@ assert() {
   fi
 }
 
-cargo build
 assert 42 "42;"
 assert 42 "90 / 2 - 3;"
 assert 35 "(3 + 4) * 5;"
